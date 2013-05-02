@@ -1,0 +1,8 @@
+Package: zkdump
+Version: 1
+Section: base
+Priority: optional
+Architecture: all
+Depends: python python-zookeeper python-setuptools
+Maintainer: dcahill@midokura.com
+Description: Simple zookeeper dump script using zc.zk
