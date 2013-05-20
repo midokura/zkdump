@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import sys
-import zc.zk
+import zookeeper
+from simplejson import dumps, loads
 from optparse import OptionParser
 
 def confirm_destructive_action(question):
@@ -16,9 +17,11 @@ def get_zookeeper(options, args):
 
   # Try connect to Zookeeper
   try:
-    zk = zc.zk.ZooKeeper(options.zklocation)
-  except:
-    pass
+    #zk = zc.zk.ZooKeeper(options.zklocation)
+    watch_session = None
+    zk = zookeeper.init(options.zklocation, watch_session)
+  except Exception, e:
+    print e
 
   if zk is None:
     print "Failed to connect to Zookeeper at %s" % (options.zklocation)
@@ -43,9 +46,37 @@ def import_zk(zk, filename):
   f.close()
 
 def export_zk(zk, filename):
+  def export_zk_subtree(path):
+    print path
+
+    data, meta = zookeeper.get(zk, path)
+
+    if meta["dataLength"] == 0:
+      data = ""
+
+    children = zookeeper.get_children(zk, path)
+    path = path + "/" if path[-1] != "/" else path
+    print [path + childname for childname in children]
+
+    child_trees = [export_zk_subtree(path + childname) for childname in children]
+    return {"path": path,
+            "name": path.rsplit('/', 1)[1],
+            "data": data,
+            "metadata": meta,
+            "children":child_trees}
+
   g = open(filename,"w")
-  g.write(zk.export_tree(ephemeral=True))
+
+  tree = export_zk_subtree("/")
+  #print tree
+  print "done exportin'"
+  treestr = dumps(tree, ensure_ascii=False)
+  print "done STRINGin'"
+  g.write(treestr)
+  print "wrote"
+  # g.write(zk.export_tree(ephemeral=True))
   g.close()
+  print "closed"
   print "Successfully dumped to %s" % (filename)
 
 if __name__ == "__main__":
