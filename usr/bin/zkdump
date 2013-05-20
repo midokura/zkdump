@@ -16,8 +16,8 @@ def confirm_destructive_action(question):
     prompt = "\n[type confirm to proceed, any other key to cancel] "
 
     sys.stdout.write(question + prompt)
-    #choice = raw_input().lower()
-    choice = "confirm"
+    choice = raw_input().lower()
+
     return choice == "confirm"
 
 def get_zookeeper(options, args):
