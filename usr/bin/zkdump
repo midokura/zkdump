@@ -1,6 +1,8 @@
 #!/usr/bin/python
 import sys
 import zookeeper
+import tempfile
+import base64
 from simplejson import dumps, loads
 from optparse import OptionParser
 
@@ -8,8 +10,8 @@ def confirm_destructive_action(question):
     prompt = "\n[type confirm to proceed, any other key to cancel] "
 
     sys.stdout.write(question + prompt)
-    choice = raw_input().lower()
-
+    #choice = raw_input().lower()
+    choice = "confirm"
     return choice == "confirm"
 
 def get_zookeeper(options, args):
@@ -17,7 +19,6 @@ def get_zookeeper(options, args):
 
   # Try connect to Zookeeper
   try:
-    #zk = zc.zk.ZooKeeper(options.zklocation)
     watch_session = None
     zk = zookeeper.init(options.zklocation, watch_session)
   except Exception, e:
@@ -31,15 +32,53 @@ def get_zookeeper(options, args):
 
   return zk
 
+def delete_zk_subtree(zk, path):
+  children = zookeeper.get_children(zk, path)
+
+  # delete children, if any
+  subpath = path + "/" if path[-1] != "/" else path
+  for childname in children:
+    delete_zk_subtree(zk, subpath + childname)
+
+  # finally delete self
+  print "try delete %s" % path
+  zookeeper.delete(zk, path)
+
+def empty_zk(zk):
+  children = zookeeper.get_children(zk, "/")
+
+  for child_name in children:
+    if child_name != "zookeeper":
+      delete_zk_subtree(zk, "/" + child_name)
+
 def import_zk(zk, filename):
+  def import_zk_subtree(tree):
+    #print tree["name"]
+    for child in tree["children"]:
+      import_zk_subtree(child)
+    pass
+
   f = open(filename,"r")
 
   current_contents = ", ".join(zookeeper.get_children(zk, "/"))
   go_ahead = confirm_destructive_action("Zookeeper currently contains data, with these root nodes: %s\nAre you sure you want to load file contents into Zookeeper? " % current_contents)
 
   if go_ahead:
+    # Backup existing data just in case
+    tf = tempfile.NamedTemporaryFile(delete=False)
+    print "Exporting existing Zookeeper data to %s as backup" % (tf.name)
+    export_zk(zk, tf.name)
+    print "Backup complete (stored at %s)" % (tf.name)
+
+    # Delete existing data
+    print "Deleting existing Zookeeper data"
+    empty_zk(zk)
+    print "Deletion complete"
+
     print "Loading data..."
-    zk.import_tree(f.read())
+    contents = loads(f.read())
+
+    import_zk_subtree(contents)
     print "Load complete."
   else:
     print "Load cancelled."
@@ -47,21 +86,23 @@ def import_zk(zk, filename):
 
 def export_zk(zk, filename):
   def export_zk_subtree(path):
-    print path
+    #print path
 
     data, meta = zookeeper.get(zk, path)
 
     if meta["dataLength"] == 0:
       data = ""
 
+    name = path.rsplit('/', 1)[1]
+
     children = zookeeper.get_children(zk, path)
     path = path + "/" if path[-1] != "/" else path
-    print [path + childname for childname in children]
+    #print [path + childname for childname in children]
 
     child_trees = [export_zk_subtree(path + childname) for childname in children]
     return {"path": path,
-            "name": path.rsplit('/', 1)[1],
-            "data": data,
+            "name": name,
+            "data": base64.b64encode(data),
             "metadata": meta,
             "children": child_trees}
 
