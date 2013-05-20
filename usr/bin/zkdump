@@ -6,6 +6,12 @@ import base64
 from simplejson import dumps, loads
 from optparse import OptionParser
 
+def world_permission(perms=zookeeper.PERM_READ):
+    return dict(perms=perms, scheme='world', id='anyone')
+
+OPEN_ACL_UNSAFE = [world_permission(zookeeper.PERM_ALL)]
+READ_ACL_UNSAFE = [world_permission()]
+
 def confirm_destructive_action(question):
     prompt = "\n[type confirm to proceed, any other key to cancel] "
 
@@ -41,7 +47,6 @@ def delete_zk_subtree(zk, path):
     delete_zk_subtree(zk, subpath + childname)
 
   # finally delete self
-  print "try delete %s" % path
   zookeeper.delete(zk, path)
 
 def empty_zk(zk):
@@ -52,11 +57,20 @@ def empty_zk(zk):
       delete_zk_subtree(zk, "/" + child_name)
 
 def import_zk(zk, filename):
-  def import_zk_subtree(tree):
-    #print tree["name"]
+  def import_zk_subtree(tree, path_so_far=""):
+    name = tree["name"]
+    path = "".join([path_so_far, name])
+
+    data = ""
+    if len(tree["data"]) > 0:
+      data = base64.b64decode(tree["data"])
+
+    # create self first
+    if len(path) > 0:
+      zookeeper.create(zk, path, data, OPEN_ACL_UNSAFE)
+
     for child in tree["children"]:
-      import_zk_subtree(child)
-    pass
+      import_zk_subtree(child, path + "/")
 
   f = open(filename,"r")
 
@@ -75,9 +89,9 @@ def import_zk(zk, filename):
     empty_zk(zk)
     print "Deletion complete"
 
+    # Load data
     print "Loading data..."
     contents = loads(f.read())
-
     import_zk_subtree(contents)
     print "Load complete."
   else:
@@ -86,8 +100,6 @@ def import_zk(zk, filename):
 
 def export_zk(zk, filename):
   def export_zk_subtree(path):
-    #print path
-
     data, meta = zookeeper.get(zk, path)
 
     if meta["dataLength"] == 0:
@@ -97,9 +109,11 @@ def export_zk(zk, filename):
 
     children = zookeeper.get_children(zk, path)
     path = path + "/" if path[-1] != "/" else path
-    #print [path + childname for childname in children]
 
-    child_trees = [export_zk_subtree(path + childname) for childname in children]
+    child_paths = [path + childname for childname in children]
+
+    child_trees = [export_zk_subtree(childpath) for childpath
+                    in child_paths if childpath != "/zookeeper"]
     return {"path": path,
             "name": name,
             "data": base64.b64encode(data),
@@ -147,4 +161,3 @@ if __name__ == "__main__":
       print "Please run either in dump mode (-d) with an outfile specified (-o) or in load mode (-l) with an infile specified (-i)."
       parser.print_help()
       sys.exit(1)
-
