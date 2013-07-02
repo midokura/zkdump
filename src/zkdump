@@ -98,7 +98,20 @@ def import_zk(zk, filename):
     print "Load cancelled."
   f.close()
 
-def export_zk(zk, filename):
+buf = ""
+def traverse(node, level=0):
+    global buf
+    path = node['path']
+    name = node['name']
+    data = node['data']
+    children = node['children']
+    buf +=  '   ' * level + name + (
+        '/' + base64.b64decode(data) if data else "") + '\n'
+    level += 1
+    for c in children:
+        traverse(c, level)
+
+def export_zk(zk, filename, pretty=None):
   def export_zk_subtree(path):
     data, meta = zookeeper.get(zk, path)
 
@@ -120,24 +133,36 @@ def export_zk(zk, filename):
             "metadata": meta,
             "children": child_trees}
 
-  g = open(filename,"w")
-
   tree = export_zk_subtree("/")
-  treestr = dumps(tree, ensure_ascii=False)
-  g.write(treestr)
-  g.close()
-  print "Successfully dumped to %s" % (filename)
+  if pretty:
+    traverse(tree)
+    treestr = buf
+  else:
+    treestr = dumps(tree, ensure_ascii=False)
+
+  if filename:
+    g = open(filename,"w")
+    g.write(treestr)
+    g.close()
+    print "Successfully dumped to %s" % (filename)
+  else:
+    print treestr
+
 
 if __name__ == "__main__":
     parser = OptionParser()
 
     parser.add_option("-z", "--zklocation", action="store", type="string", dest="zklocation",
                       help="Location of zookeeper server in server:port format, e.g. localhost:2181")
-
-    parser.add_option("-d", "--dump", action="store_true", dest="dumpmode", default=False,
-                                                          help="Dump from zookeeper")
+    parser.add_option("-d", "--dump", action="store_true", dest="dumpmode",
+                      default=False,
+                      help="Dump from zookeeper to a file or standard output without -o option.")
     parser.add_option("-o", "--outfile", action="store", type="string", dest="outfile",
                       help="Path of the file to write to when dumping data from zookeeper (when using -l option)")
+    parser.add_option("-p", "--pretty", action="store_true", dest="pretty",
+                      default=False,
+                      help="Pretty print with tree structure. "
+                           "CAUTION: PRETTY PRINTED DATA CANNOT BE LOADED BACK")
     parser.add_option("-l", "--load", action="store_true", dest="loadmode", default=False,
                                                           help="Load into zookeeper")
     parser.add_option("-i", "--infile", action="store", type="string", dest="infile",
@@ -153,8 +178,8 @@ if __name__ == "__main__":
     zk = get_zookeeper(options, args)
 
     # Check we have a valid mode
-    if options.dumpmode and options.outfile is not None and len(options.outfile) > 0:
-      export_zk(zk, options.outfile)
+    if options.dumpmode:
+        export_zk(zk, options.outfile, options.pretty)
     elif options.loadmode and options.infile is not None and len(options.infile) > 0:
       import_zk(zk, options.infile)
     else:
