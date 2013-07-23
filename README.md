@@ -13,9 +13,15 @@ zkdump -z localhost:2181 -l -i output.json
 
 Notes
 ------------
-* Ephemeral nodes are dumped, and are loaded as permanent nodes.
 * The /zookeeper tree is not dumped.
-* zkdump will ask you to type "confirm" when loading, to ensure you don't accidentally overwrite existing zookeeper data.
+* When exporting, all nodes (including ephemeral nodes) are dumped.
+* When loading, zkdump will ask you to type confirmation,
+to ensure you don't accidentally overwrite existing zookeeper data.
+* When loading, zkdump will also ask you whether you wish to use "restore" mode or
+"debug" mode:
+ * "restore" mode is standard, and only loads permanent nodes
+ * "debug" mode is used for inspecting a snapshot of a Zookeeper
+install - it loads ephemeral nodes as permanent nodes
 
 Packaging
 -------------

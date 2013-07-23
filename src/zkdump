@@ -12,13 +12,25 @@ def world_permission(perms=zookeeper.PERM_READ):
 OPEN_ACL_UNSAFE = [world_permission(zookeeper.PERM_ALL)]
 READ_ACL_UNSAFE = [world_permission()]
 
-def confirm_destructive_action(question):
-    prompt = "\n[type confirm to proceed, any other key to cancel] "
+CANCEL = -1
+RESTORE_MODE = 1
+DEBUG_MODE = 2
 
+def choose_restore_mode(question):
+    prompt = """
+1. If you wish to restore from a backup (default), type: restore
+2. If you wish to import full contents (including ephemeral nodes) for debug purposes, type: debug
+3. If you wish to cancel / exit, type any other key.
+"""
     sys.stdout.write(question + prompt)
     choice = raw_input().lower()
 
-    return choice == "confirm"
+    if choice == "restore":
+      return RESTORE_MODE
+    elif choice == "debug":
+      return DEBUG_MODE
+    else:
+      return CANCEL
 
 def get_zookeeper(options, args):
   zk = None
@@ -26,6 +38,7 @@ def get_zookeeper(options, args):
   # Try connect to Zookeeper
   try:
     watch_session = None
+    zookeeper.set_debug_level(zookeeper.LOG_LEVEL_ERROR)
     zk = zookeeper.init(options.zklocation, watch_session)
   except Exception, e:
     print e
@@ -57,25 +70,37 @@ def empty_zk(zk):
       delete_zk_subtree(zk, "/" + child_name)
 
 def import_zk(zk, filename):
-  def import_zk_subtree(tree, path_so_far=""):
+  def import_zk_subtree(tree, load_mode, path_so_far=""):
+
     name = tree["name"]
     path = "".join([path_so_far, name])
 
-    data = ""
-    if len(tree["data"]) > 0:
-      data = base64.b64decode(tree["data"])
+    # Only load permanent nodes unless we're in debug mode
+    isPermanentNode = tree["metadata"]["ephemeralOwner"] == 0
+    if isPermanentNode or load_mode == DEBUG_MODE:
+      # create self first
+      data = ""
+      if len(tree["data"]) > 0:
+        data = base64.b64decode(tree["data"])
 
-    # create self first
-    if len(path) > 0:
-      zookeeper.create(zk, path, data, OPEN_ACL_UNSAFE)
+      if len(path) > 0:
+        zookeeper.create(zk, path, data, OPEN_ACL_UNSAFE)
 
-    for child in tree["children"]:
-      import_zk_subtree(child, path + "/")
+      for child in tree["children"]:
+        import_zk_subtree(child, load_mode, path + "/")
 
   f = open(filename,"r")
 
   current_contents = ", ".join(zookeeper.get_children(zk, "/"))
-  go_ahead = confirm_destructive_action("Zookeeper currently contains data, with these root nodes: %s\nAre you sure you want to load file contents into Zookeeper? " % current_contents)
+  load_mode = choose_restore_mode("""*********************************************************************
+WARNING: Zookeeper currently contains data, with these root nodes:
+  %s
+This data will be deleted, and file contents will be loaded into
+Zookeeper instead.
+*********************************************************************
+Are you sure you wish to proceed? """ % current_contents)
+
+  go_ahead = load_mode != CANCEL
 
   if go_ahead:
     # Backup existing data just in case
@@ -92,7 +117,7 @@ def import_zk(zk, filename):
     # Load data
     print "Loading data..."
     contents = loads(f.read())
-    import_zk_subtree(contents)
+    import_zk_subtree(contents, load_mode)
     print "Load complete."
   else:
     print "Load cancelled."
