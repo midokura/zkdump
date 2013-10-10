@@ -138,20 +138,33 @@ def traverse(node, level=0):
 
 def export_zk(zk, filename, pretty=None):
   def export_zk_subtree(path):
-    data, meta = zookeeper.get(zk, path)
+    data = None
+    meta = None
+
+    try:
+      data, meta = zookeeper.get(zk, path)
+    except zookeeper.NoNodeException:
+      # For fast-changing entries, e.g. ARP, this could happen
+      return None
 
     if meta["dataLength"] == 0:
       data = ""
 
     name = path.rsplit('/', 1)[1]
 
-    children = zookeeper.get_children(zk, path)
+    children = []
+    try:
+      children = zookeeper.get_children(zk, path)
+    except zookeeper.NoNodeException:
+      # For fast-changing entries, e.g. ARP, this could happen
+      pass
+
     path = path + "/" if path[-1] != "/" else path
 
-    child_paths = [path + childname for childname in children]
+    child_paths = filter(lambda x: x != "/zookeeper", [path + childname for childname in children])
 
-    child_trees = [export_zk_subtree(childpath) for childpath
-                    in child_paths if childpath != "/zookeeper"]
+    child_trees = filter(lambda x: x is not None, [export_zk_subtree(childpath) for childpath in child_paths])
+
     return {"path": path,
             "name": name,
             "data": base64.b64encode(data),
