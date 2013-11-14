@@ -1,8 +1,0 @@
-Package: zkdump
-Version: 1.03
-Section: base
-Priority: optional
-Architecture: all
-Depends: python, python-zookeeper, python-simplejson
-Maintainer: dcahill@midokura.com
-Description: Simple zookeeper dump script
