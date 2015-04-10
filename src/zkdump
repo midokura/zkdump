@@ -3,6 +3,7 @@ import sys
 import zookeeper
 import tempfile
 import base64
+import re
 from simplejson import dumps, loads
 from optparse import OptionParser
 
@@ -123,6 +124,13 @@ Are you sure you wish to proceed? """ % current_contents)
     print "Load cancelled."
   f.close()
 
+def indent_data_with_newlines(data, indent):
+    if not re.search('\n', data):
+        return data
+    data = '\n' + data
+    another_indent = '   '
+    return re.sub('\n', '\n' + indent + another_indent, data)
+
 buf = ""
 def traverse(node, level=0):
     global buf
@@ -130,8 +138,11 @@ def traverse(node, level=0):
     name = node['name']
     data = node['data']
     children = node['children']
-    buf +=  '   ' * level + name + (
-        '/' + base64.b64decode(data) if data else "") + '\n'
+    indent = '   ' * level
+    decoded_data = base64.b64decode(data)
+    buf += indent + name + (
+        '/' + indent_data_with_newlines(decoded_data, indent) if data else ""
+        ) + '\n'
     level += 1
     for c in children:
         traverse(c, level)
