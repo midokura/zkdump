@@ -1,20 +1,14 @@
-# Get version number from command line
-pkgver=$1
-if [ '$pkgver' == '' ]
-then
-	echo "Please specify the package version, e.g. 'package.sh 1.04' to package as version 1.04"
-	exit
-else
-    echo "Packaging with version number $pkgver"
-fi
+#!/bin/bash
+
+VERSION=`cat VERSION`
 
 # Common args for rpm and deb
 FPM_BASE_ARGS=$(cat <<EOF
---name 'zkdump' --architecture 'noarch' --license '2013, Midokura' \
---vendor 'Midokura' --maintainer 'Midokura' --url 'http://midokura.com' \
+--name 'zkdump' --architecture 'noarch' --license '2015, Midokura' \
+--vendor 'MidoNet' --maintainer 'MidoNet' --url 'https://midonet.org' \
 --description 'Simple zookeeper dump and load script' \
 -d 'python' -d 'python-simplejson' \
--s dir -C src --prefix /usr/bin --version $pkgver
+-s dir -C src --prefix /usr/bin --version $VERSION
 EOF
 )
 
